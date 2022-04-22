@@ -85,6 +85,7 @@ class DQN:
         self.epsilon = epsilon
         self.seed = seed
         self.model_path = model_path
+        self.test_set = dict()
         self._init_model()
 
     def _init_model(self):
@@ -116,6 +117,7 @@ class DQN:
         self.value_net_target.load_state_dict(self.value_net.state_dict())
         # 神经网络优化器
         self.optimizer = optim.Adam(self.value_net.parameters(), lr=self.lr_q)
+        self.load_test()
 
     def choose_action(self, state, flag=False):
         state = FLOAT(self.matrix[[state]]).to(device)
@@ -132,19 +134,21 @@ class DQN:
             action = np.random.randint(0, self.num_actions)
         return action
 
-    def test(self):
-        # self.set_eval()
-        test_set = dict()
+    def load_test(self):
         # FB15K -> SVKG
         with open('newTest.txt', 'r') as f:
             for line in f.readlines():
                 h, r, t = line.rstrip('\n').split('\t')
                 try:
-                    test_set[self.ent_dict[h]].append(self.ent_dict[t])
+                    self.test_set[self.ent_dict[h]].append(self.ent_dict[t])
                 except KeyError:
-                    test_set[self.ent_dict[h]] = [self.ent_dict[t]]
+                    self.test_set[self.ent_dict[h]] = [self.ent_dict[t]]
         # 记录数据集的基本长度参数
-        dataset_len = len(test_set)
+        self.dataset_len = len(self.test_set)
+
+
+    def test(self):
+
         # 初始化性能指标
         mr = 0
         mrr = 0
@@ -154,7 +158,7 @@ class DQN:
         # *******
         with torch.no_grad():
             n = 0
-            for head in test_set.keys():
+            for head in self.test_set.keys():
                 state = FLOAT(self.matrix[[head]]).to(device)
                 with torch.no_grad():
                     q_values = self.value_net.forward(state, )
@@ -173,7 +177,7 @@ class DQN:
                 #         if index<=2:
                 #             ap+=index/(i+1)
                 #             count+=1
-                for i in test_set[head]:
+                for i in self.test_set[head]:
                     num=score_list.index(i)+1
                     if rank==None:
                         rank=num
@@ -181,13 +185,13 @@ class DQN:
                         rank=num
                     index+=1
                     ap+=index/(num)
-                ap /= len(test_set[head])
+                ap /= len(self.test_set[head])
                 mrr += 1 / rank
                 mr += rank
                 map += ap
                 n += 1
             print('<TEST> sample:14952/{}, mr={}|{:.2f}%, mrr={:.4f}, map={:.4f}, n={}'.format
-                       (dataset_len, int(mr / n), mr / n / self.num_actions * 100, mrr / n, map / n, n))
+                       (self.dataset_len, int(mr / n), mr / n / self.dataset_len * 100, mrr / n, map / n, n))
             # print(r_list)
         return mr, mrr, map
 
